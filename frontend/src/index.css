@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/* Custom animations and styles */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-bg {
+  background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+  background-size: 400% 400%;
+  animation: gradient 15s ease infinite;
+}
+
+.glass-effect {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.file-upload-area {
+  transition: all 0.3s ease;
+}
+
+.file-upload-area:hover {
+  background-color: rgba(59, 130, 246, 0.05);
+  border-color: #3b82f6;
+}
+
+.notification-enter {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+
+.notification-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.notification-exit {
+  opacity: 1;
+}
+
+.notification-exit-active {
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity 300ms, transform 300ms;
+}
