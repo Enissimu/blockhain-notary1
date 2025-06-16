@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Search, FileText, Hash, CheckCircle, XCircle, Clock, User, Loader, Upload } from 'lucide-react';
+import { Search, FileText, Hash, CheckCircle, XCircle, Clock, User, Loader, Upload, Edit } from 'lucide-react';
 import axios from 'axios';
 
 const DocumentVerify = ({ onNotification }) => {
@@ -9,6 +9,8 @@ const DocumentVerify = ({ onNotification }) => {
   const [verificationResult, setVerificationResult] = useState(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isHashing, setIsHashing] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleFileSelect = (event) => {
@@ -62,7 +64,8 @@ const DocumentVerify = ({ onNotification }) => {
     setVerificationResult(null);
 
     try {
-      const response = await axios.get(`http://localhost:3000/api/documents/verify/${hashToVerify}`);
+      console.log('🔍 Verifying document with hash:', hashToVerify);
+      const response = await axios.get(`http://localhost:3000/api/documents/${hashToVerify}/verify`);
       
       if (response.data.success) {
         setVerificationResult(response.data.data);
@@ -73,8 +76,17 @@ const DocumentVerify = ({ onNotification }) => {
         }
       }
     } catch (error) {
-      onNotification('Failed to verify document', 'error');
       console.error('Verification error:', error);
+      
+      // Better error handling
+      if (error.response && error.response.data) {
+        const errorData = error.response.data;
+        onNotification(errorData.error || 'Failed to verify document', 'error');
+      } else if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {
+        onNotification('Network error: Unable to connect to backend service', 'error');
+      } else {
+        onNotification('Failed to verify document: ' + (error.message || 'Unknown error'), 'error');
+      }
     } finally {
       setIsVerifying(false);
     }
@@ -108,6 +120,61 @@ const DocumentVerify = ({ onNotification }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const approveDocument = async (hash) => {
+    setIsApproving(true);
+    try {
+      console.log('👍 Approving document:', hash);
+      const response = await axios.post(`http://localhost:3000/api/documents/${hash}/approve`);
+      if (response.data.success) {
+        onNotification('Document approved successfully! 🎉', 'success');
+        // Refresh verification to show updated approval count
+        verifyDocument(hash);
+      }
+    } catch (error) {
+      console.error('Approval error:', error);
+      if (error.response && error.response.data) {
+        onNotification(error.response.data.error || 'Failed to approve document', 'error');
+      } else {
+        onNotification('Failed to approve document', 'error');
+      }
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const signDocument = async (hash) => {
+    setIsSigning(true);
+    try {
+      console.log('✍️ Signing document:', hash);
+      const response = await axios.post(`http://localhost:3000/api/documents/${hash}/sign`);
+      if (response.data.success) {
+        onNotification('Document signed successfully! 🎉', 'success');
+        // Refresh verification to show updated signature count
+        verifyDocument(hash);
+      }
+    } catch (error) {
+      console.error('Signing error:', error);
+      if (error.response && error.response.data) {
+        const errorMsg = error.response.data.error || 'Failed to sign document';
+        if (errorMsg.includes('Not a required signer')) {
+          onNotification('You are not authorized to sign this document. Only required signers can sign.', 'warning');
+        } else {
+          onNotification(errorMsg, 'error');
+        }
+      } else {
+        onNotification('Failed to sign document', 'error');
+      }
+    } finally {
+      setIsSigning(false);
+    }
+  };
+
+  const refreshVerification = async () => {
+    if (documentHash) {
+      verifyDocument(documentHash);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="max-w-4xl mx-auto">
@@ -128,7 +195,7 @@ const DocumentVerify = ({ onNotification }) => {
                 }}
                 className={`px-4 py-2 rounded-md font-medium text-sm transition-all duration-200 ${
                   verificationMethod === 'hash'
-                    ? 'bg-white text-primary-600 shadow-sm'
+                    ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -143,7 +210,7 @@ const DocumentVerify = ({ onNotification }) => {
                 }}
                 className={`px-4 py-2 rounded-md font-medium text-sm transition-all duration-200 ${
                   verificationMethod === 'file'
-                    ? 'bg-white text-primary-600 shadow-sm'
+                    ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -166,12 +233,12 @@ const DocumentVerify = ({ onNotification }) => {
                 value={documentHash}
                 onChange={(e) => setDocumentHash(e.target.value)}
                 placeholder="0x... (Enter the document hash)"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <button
                 onClick={() => verifyDocument()}
                 disabled={isVerifying || !documentHash.trim()}
-                className="bg-primary-500 text-white px-6 py-2 rounded-lg font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 {isVerifying ? <Loader className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 <span>{isVerifying ? 'Verifying...' : 'Verify'}</span>
@@ -196,7 +263,7 @@ const DocumentVerify = ({ onNotification }) => {
               
               {selectedFile ? (
                 <div className="space-y-3">
-                  <FileText className="h-12 w-12 text-primary-500 mx-auto" />
+                  <FileText className="h-12 w-12 text-blue-600 mx-auto" />
                   <div>
                     <p className="text-lg font-medium text-gray-900">{selectedFile.name}</p>
                     <p className="text-sm text-gray-500">
@@ -207,7 +274,7 @@ const DocumentVerify = ({ onNotification }) => {
                     <button
                       onClick={hashFileForVerification}
                       disabled={isHashing}
-                      className="bg-primary-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                     >
                       {isHashing ? <Loader className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                       <span>{isHashing ? 'Verifying...' : 'Verify File'}</span>
@@ -295,6 +362,43 @@ const DocumentVerify = ({ onNotification }) => {
                       <p className="text-sm">{verificationResult.approverCount} approval(s)</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="mt-6 pt-6 border-t border-green-200">
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Document Actions</h4>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => approveDocument(documentHash)}
+                      disabled={isApproving}
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {isApproving ? <Loader className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                      <span>{isApproving ? 'Approving...' : 'Approve Document'}</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => signDocument(documentHash)}
+                      disabled={isSigning}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {isSigning ? <Loader className="h-4 w-4 animate-spin" /> : <Edit className="h-4 w-4" />}
+                      <span>{isSigning ? 'Signing...' : 'Sign Document'}</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => refreshVerification()}
+                      disabled={isVerifying}
+                      className="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {isVerifying ? <Loader className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                      <span>Refresh Status</span>
+                    </button>
+                  </div>
+                  
+                  <p className="text-xs text-gray-600 mt-2">
+                    💡 Approve to endorse this document or sign if you're a required signer
+                  </p>
                 </div>
               </div>
             ) : (

@@ -20,10 +20,20 @@ function App() {
       const response = await fetch('http://localhost:3000/api/health');
       if (response.ok) {
         const data = await response.json();
+        console.log('Backend health check:', data);
+        
         setContractAddress(data.blockchain.contractAddress);
-        showNotification('Connected to blockchain notary service', 'success');
+        
+        if (data.blockchain.connected && data.blockchain.networkStatus === 'connected') {
+          showNotification('Connected to blockchain notary service', 'success');
+        } else if (data.blockchain.networkStatus === 'not configured') {
+          showNotification('Backend connected but blockchain not configured', 'warning');
+        } else {
+          showNotification('Backend connected but blockchain unavailable', 'warning');
+        }
       }
     } catch (error) {
+      console.error('Backend connection error:', error);
       showNotification('Backend service not available. Please start the server.', 'error');
     }
   };

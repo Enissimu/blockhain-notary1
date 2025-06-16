@@ -3,19 +3,17 @@ pragma solidity ^0.8.19;
 
 /**
  * @title NotaryService
- * @dev Blockchain-based notarization service for document authentication and versioning
- * Based on 4IRE Labs notarization concepts: immutable timestamping, proof of existence, and decentralized verification
  */
 contract NotaryService {
     
-    // Events for transparency and logging
+
     event DocumentNotarized(bytes32 indexed documentHash, address indexed notary, uint256 timestamp, string metadata);
     event DocumentVersionCreated(bytes32 indexed originalHash, bytes32 indexed newVersionHash, uint256 version, address indexed creator);
     event DocumentSigned(bytes32 indexed documentHash, address indexed signer, uint256 timestamp);
     event DocumentApproved(bytes32 indexed documentHash, address indexed approver, uint256 timestamp);
     event DocumentRejected(bytes32 indexed documentHash, address indexed rejector, uint256 timestamp, string reason);
     
-    // Structs for data organization
+    
     struct NotarizedDocument {
         bytes32 documentHash;
         address notary;
@@ -49,7 +47,7 @@ contract NotaryService {
         ARCHIVED
     }
     
-    // State variables
+    
     mapping(bytes32 => NotarizedDocument) public documents;
     mapping(bytes32 => DocumentVersion[]) public documentVersions;
     mapping(bytes32 => bytes32) public latestVersionHash;
@@ -58,7 +56,7 @@ contract NotaryService {
     address public owner;
     uint256 public totalDocuments;
     
-    // Modifiers
+    
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can perform this action");
         _;
@@ -85,10 +83,10 @@ contract NotaryService {
     }
     
     /**
-     * @dev Notarize a document by storing its hash with timestamp
-     * @param _documentHash Hash of the document to notarize
-     * @param _metadata Additional metadata about the document
-     * @param _requiredSigners Addresses that must sign this document
+     * @dev 
+     * @param _documentHash 
+     * @param _metadata
+     * @param _requiredSigners 
      */
     function notarizeDocument(
         bytes32 _documentHash,
@@ -106,7 +104,7 @@ contract NotaryService {
         doc.requiredSigners = _requiredSigners;
         doc.status = DocumentStatus.PENDING;
         
-        // Create initial version
+        // İlk versiyonları 
         DocumentVersion memory initialVersion = DocumentVersion({
             documentHash: _documentHash,
             version: 1,
@@ -125,10 +123,10 @@ contract NotaryService {
     }
     
     /**
-     * @dev Create a new version of an existing document
-     * @param _originalHash Hash of the original document
-     * @param _newVersionHash Hash of the new version
-     * @param _changeDescription Description of changes made
+     * @dev Dökümanın yeni versiyonunu yaratır
+     * @param _originalHash 
+     * @param _newVersionHash 
+     * @param _changeDescription 
      */
     function createDocumentVersion(
         bytes32 _originalHash,
@@ -137,11 +135,11 @@ contract NotaryService {
     ) external documentExists(_originalHash) {
         require(!documents[_newVersionHash].exists, "New version hash already exists");
         
-        // Get current latest version
+        
         DocumentVersion[] storage versions = documentVersions[_originalHash];
         require(versions.length > 0, "No versions found");
         
-        // Mark previous latest as not latest
+        
         for (uint i = 0; i < versions.length; i++) {
             if (versions[i].isLatest) {
                 versions[i].isLatest = false;
@@ -149,7 +147,7 @@ contract NotaryService {
             }
         }
         
-        // Create new version
+        
         uint256 newVersionNumber = versions.length + 1;
         DocumentVersion memory newVersion = DocumentVersion({
             documentHash: _newVersionHash,
@@ -164,7 +162,7 @@ contract NotaryService {
         versions.push(newVersion);
         latestVersionHash[_originalHash] = _newVersionHash;
         
-        // Copy document structure for new version
+        
         NotarizedDocument storage originalDoc = documents[_originalHash];
         NotarizedDocument storage newDoc = documents[_newVersionHash];
         newDoc.documentHash = _newVersionHash;
@@ -241,12 +239,12 @@ contract NotaryService {
     }
     
     /**
-     * @dev Verify if a document exists and get its details
-     * @param _documentHash Hash of the document to verify
-     * @return exists Whether the document exists
-     * @return notary Address of the notary who notarized the document
-     * @return timestamp When the document was notarized
-     * @return status Current status of the document
+     * @dev Dokümanın oluğ olmadıgını kontrol eder ve detaylarını alır
+     * @param _documentHash 
+     * @return exists 
+     * @return notary 
+     * @return timestamp 
+     * @return status 
      */
     function verifyDocument(bytes32 _documentHash) 
         external 
@@ -272,9 +270,9 @@ contract NotaryService {
     }
     
     /**
-     * @dev Get document version history
-     * @param _originalHash Hash of the original document
-     * @return Array of document versions
+     * @dev Dökümanın versiyon tarihi geçmişi 
+     * @param _originalHash 
+     * @return Array 
      */
     function getDocumentVersions(bytes32 _originalHash) 
         external 
@@ -294,7 +292,7 @@ contract NotaryService {
     }
     
     /**
-     * @dev Add an authorized notary
+     * @dev Auth olmuş notary ekler
      * @param _notary Address to authorize as notary
      */
     function addNotary(address _notary) external onlyOwner {
@@ -302,7 +300,7 @@ contract NotaryService {
     }
     
     /**
-     * @dev Remove an authorized notary
+     * @dev 
      * @param _notary Address to remove from notaries
      */
     function removeNotary(address _notary) external onlyOwner {
@@ -330,7 +328,7 @@ contract NotaryService {
     }
     
     /**
-     * @dev Get required signers for a document
+     * @dev Gerekli signerları al
      * @param _documentHash Hash of the document
      * @return Array of required signer addresses
      */

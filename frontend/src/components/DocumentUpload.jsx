@@ -78,6 +78,12 @@ const DocumentUpload = ({ onNotification }) => {
     const validSigners = requiredSigners.filter(signer => signer.trim() !== '');
 
     try {
+      console.log('Sending notarization request:', {
+        documentHash: fileHash,
+        metadata: metadata.trim(),
+        requiredSigners: validSigners,
+      });
+
       const response = await axios.post('http://localhost:3000/api/documents/notarize', {
         documentHash: fileHash,
         metadata: metadata.trim(),
@@ -86,11 +92,36 @@ const DocumentUpload = ({ onNotification }) => {
 
       if (response.data.success) {
         setNotarized(true);
-        onNotification('Document notarized successfully on blockchain!', 'success');
+        console.log('Notarization successful:', response.data);
+        onNotification(
+          `Document notarized successfully! Transaction: ${response.data.data.transactionHash.slice(0, 10)}...`, 
+          'success'
+        );
       }
     } catch (error) {
-      onNotification('Failed to notarize document', 'error');
       console.error('Notarization error:', error);
+      
+      // Handle different types of errors
+      if (error.response && error.response.data) {
+        const errorData = error.response.data;
+        let errorMessage = errorData.error || 'Failed to notarize document';
+        
+        // Add suggestions if available
+        if (errorData.suggestions && errorData.suggestions.length > 0) {
+          errorMessage += '\n\nSuggestions:\n' + errorData.suggestions.map(s => `• ${s}`).join('\n');
+        }
+        
+        // Add details if available
+        if (errorData.details) {
+          console.log('Error details:', errorData.details);
+        }
+        
+        onNotification(errorMessage, 'error');
+      } else if (error.code === 'NETWORK_ERROR' || error.message.includes('Network Error')) {
+        onNotification('Network error: Unable to connect to backend service', 'error');
+      } else {
+        onNotification('Failed to notarize document: ' + (error.message || 'Unknown error'), 'error');
+      }
     } finally {
       setIsNotarizing(false);
     }
@@ -146,7 +177,7 @@ const DocumentUpload = ({ onNotification }) => {
             
             {selectedFile ? (
               <div className="space-y-3">
-                <FileText className="h-12 w-12 text-primary-500 mx-auto" />
+                <FileText className="h-12 w-12 text-blue-600 mx-auto" />
                 <div>
                   <p className="text-lg font-medium text-gray-900">{selectedFile.name}</p>
                   <p className="text-sm text-gray-500">
@@ -225,7 +256,7 @@ const DocumentUpload = ({ onNotification }) => {
                 value={metadata}
                 onChange={(e) => setMetadata(e.target.value)}
                 placeholder="Enter document description, purpose, or any relevant information..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 rows={3}
               />
             </div>
@@ -238,7 +269,7 @@ const DocumentUpload = ({ onNotification }) => {
                 </label>
                 <button
                   onClick={addSignerField}
-                  className="text-sm text-primary-600 hover:text-primary-800 font-medium"
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
                 >
                   + Add Signer
                 </button>
@@ -253,7 +284,7 @@ const DocumentUpload = ({ onNotification }) => {
                       value={signer}
                       onChange={(e) => updateSigner(index, e.target.value)}
                       placeholder="0x... (Ethereum address)"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     {requiredSigners.length > 1 && (
                       <button
@@ -276,7 +307,7 @@ const DocumentUpload = ({ onNotification }) => {
             <button
               onClick={notarizeDocument}
               disabled={isNotarizing || !metadata.trim() || notarized}
-              className="bg-primary-500 text-white px-8 py-3 rounded-lg font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
+              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
             >
               {isNotarizing ? (
                 <Loader className="h-5 w-5 animate-spin" />
@@ -289,6 +320,13 @@ const DocumentUpload = ({ onNotification }) => {
                 {isNotarizing ? 'Notarizing...' : notarized ? 'Notarized!' : 'Notarize on Blockchain'}
               </span>
             </button>
+            
+            {/* Help text when button is disabled */}
+            {!metadata.trim() && (
+              <p className="text-sm text-gray-500 mt-2">
+                ⬆️ Please fill in the document metadata above to enable notarization
+              </p>
+            )}
           </div>
         )}
 

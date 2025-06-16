@@ -18,9 +18,24 @@ const rateLimiter = new RateLimiterMemory({
   duration: 60, // Per 60 seconds
 });
 
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: [
+    'http://localhost:5173', // Vite default port
+    'http://localhost:3000', // React default port
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
 // Middleware
-app.use(helmet());
-app.use(cors());
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(cors(corsOptions));
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -96,11 +111,36 @@ function initializeBlockchain() {
       console.log('✅ Blockchain connection initialized successfully');
       console.log('📋 Contract Address:', CONTRACT_ADDRESS);
       console.log('🔗 Network:', NETWORK_URL);
+      console.log('👤 Wallet Address:', wallet.address);
+      
+      // Test the connection
+      testBlockchainConnection();
     } else {
-      console.log('⚠️  Warning: Contract address or private key not provided. Some features will be limited.');
+      console.log('⚠️  Warning: Contract address or private key not provided.');
+      console.log('   Please set CONTRACT_ADDRESS and PRIVATE_KEY in your .env file');
+      console.log('   Some features will be limited until blockchain is configured.');
     }
   } catch (error) {
     console.error('❌ Failed to initialize blockchain connection:', error.message);
+    console.log('💡 Make sure your local blockchain node is running on', NETWORK_URL);
+  }
+}
+
+async function testBlockchainConnection() {
+  try {
+    if (provider) {
+      const network = await provider.getNetwork();
+      const blockNumber = await provider.getBlockNumber();
+      console.log('🌐 Network:', network.name, '(Chain ID:', network.chainId + ')');
+      console.log('📦 Latest Block:', blockNumber);
+      
+      if (wallet) {
+        const balance = await provider.getBalance(wallet.address);
+        console.log('💰 Wallet Balance:', ethers.utils.formatEther(balance), 'ETH');
+      }
+    }
+  } catch (error) {
+    console.error('⚠️  Blockchain connection test failed:', error.message);
   }
 }
 
@@ -116,16 +156,53 @@ function validateEthereumAddress(address) {
 // API Routes
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    blockchain: {
-      connected: !!contract,
-      contractAddress: CONTRACT_ADDRESS,
-      network: NETWORK_URL
+app.get('/api/health', async (req, res) => {
+  try {
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      blockchain: {
+        connected: !!contract,
+        contractAddress: CONTRACT_ADDRESS || null,
+        network: NETWORK_URL,
+        providerConnected: !!provider
+      },
+      services: {
+        fileUpload: true,
+        documentHashing: true,
+        blockchainNotarization: !!contract
+      }
+    };
+
+    // Test blockchain connection if available
+    if (provider) {
+      try {
+        const blockNumber = await provider.getBlockNumber();
+        health.blockchain.latestBlock = blockNumber;
+        health.blockchain.networkStatus = 'connected';
+        
+        if (wallet) {
+          health.blockchain.walletAddress = wallet.address;
+          const balance = await provider.getBalance(wallet.address);
+          health.blockchain.walletBalance = ethers.utils.formatEther(balance);
+        }
+      } catch (error) {
+        health.blockchain.networkStatus = 'error';
+        health.blockchain.error = error.message;
+      }
+    } else {
+      health.blockchain.networkStatus = 'not configured';
     }
-  });
+
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
 });
 
 // Upload and hash document
@@ -158,26 +235,67 @@ app.post('/api/documents/hash', upload.single('document'), (req, res) => {
 // Notarize document
 app.post('/api/documents/notarize', async (req, res) => {
   try {
+    console.log('📝 Notarization request received:', {
+      hasContract: !!contract,
+      body: req.body,
+      timestamp: new Date().toISOString()
+    });
+
     if (!contract) {
-      return res.status(503).json({ error: 'Blockchain not available' });
+      console.log('❌ Contract not available for notarization');
+      return res.status(503).json({ 
+        error: 'Blockchain not available',
+        details: 'Smart contract not initialized. Please check your configuration.',
+        suggestions: [
+          'Ensure PRIVATE_KEY is set in .env file',
+          'Ensure CONTRACT_ADDRESS is set in .env file',
+          'Make sure local blockchain node is running',
+          'Deploy the contract if not already deployed'
+        ]
+      });
     }
 
     const { documentHash, metadata, requiredSigners } = req.body;
 
     if (!documentHash || !metadata) {
-      return res.status(400).json({ error: 'Document hash and metadata are required' });
+      return res.status(400).json({ 
+        error: 'Document hash and metadata are required',
+        received: {
+          documentHash: !!documentHash,
+          metadata: !!metadata
+        }
+      });
+    }
+
+    // Validate document hash format
+    if (!documentHash.startsWith('0x') || documentHash.length !== 66) {
+      return res.status(400).json({ 
+        error: 'Invalid document hash format',
+        details: 'Hash must be a 32-byte hex string starting with 0x'
+      });
     }
 
     // Validate Ethereum addresses
     const signers = requiredSigners || [];
     for (const signer of signers) {
       if (!validateEthereumAddress(signer)) {
-        return res.status(400).json({ error: `Invalid Ethereum address: ${signer}` });
+        return res.status(400).json({ 
+          error: `Invalid Ethereum address: ${signer}`,
+          details: 'All signer addresses must be valid Ethereum addresses'
+        });
       }
     }
 
+    console.log('🔄 Attempting to notarize document on blockchain...');
+    console.log('📋 Document Hash:', documentHash);
+    console.log('📝 Metadata:', metadata);
+    console.log('👥 Signers:', signers);
+
     const tx = await contract.notarizeDocument(documentHash, metadata, signers);
+    console.log('⏳ Transaction sent:', tx.hash);
+    
     const receipt = await tx.wait();
+    console.log('✅ Transaction confirmed in block:', receipt.blockNumber);
 
     res.json({
       success: true,
@@ -188,14 +306,35 @@ app.post('/api/documents/notarize', async (req, res) => {
         gasUsed: receipt.gasUsed.toString(),
         documentHash,
         metadata,
-        requiredSigners: signers
+        requiredSigners: signers,
+        notaryAddress: wallet.address,
+        timestamp: new Date().toISOString()
       }
     });
   } catch (error) {
-    console.error('Error notarizing document:', error);
+    console.error('❌ Notarization error:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to notarize document';
+    let suggestions = [];
+    
+    if (error.code === 'NETWORK_ERROR') {
+      errorMessage = 'Network connection failed';
+      suggestions.push('Check if your blockchain node is running');
+      suggestions.push('Verify NETWORK_URL in your configuration');
+    } else if (error.code === 'INSUFFICIENT_FUNDS') {
+      errorMessage = 'Insufficient funds for transaction';
+      suggestions.push('Add more ETH to your wallet');
+      suggestions.push('Check your wallet balance');
+    } else if (error.reason) {
+      errorMessage = error.reason;
+    }
+    
     res.status(500).json({ 
-      error: 'Failed to notarize document',
-      details: error.message 
+      error: errorMessage,
+      details: error.message,
+      code: error.code,
+      suggestions
     });
   }
 });
